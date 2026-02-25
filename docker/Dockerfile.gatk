@@ -1,0 +1,22 @@
+FROM continuumio/miniconda3
+
+LABEL description="GATK4 environment for variant calling, includes samtools and bcftools"
+LABEL maintainer="ASE-network-clustering"
+
+WORKDIR /app
+
+# Copy environment file
+COPY environments/gatk_env.yml .
+
+# Create conda environment
+RUN conda env create -f gatk_env.yml && \
+    conda clean -afy
+
+# Set environment as default
+ENV PATH=/opt/conda/envs/gatk_env/bin:$PATH
+SHELL ["conda", "run", "-n", "gatk_env", "/bin/bash", "-c"]
+
+# Verify installation
+RUN gatk --version && samtools --version && bcftools --version
+
+CMD ["/bin/bash"]

@@ -1,0 +1,24 @@
+FROM continuumio/miniconda3
+
+LABEL description="RSeQC environment for RNA-seq quality control and analysis"
+LABEL maintainer="ASE-network-clustering"
+
+WORKDIR /app
+
+# Copy environment file
+COPY environments/rseqc_env.yml .
+
+# Create conda environment
+RUN conda env create -f rseqc_env.yml && \
+    conda clean -afy
+
+# Set environment as default
+ENV PATH=/opt/conda/envs/rseqc_env/bin:$PATH
+SHELL ["conda", "run", "-n", "rseqc_env", "/bin/bash", "-c"]
+
+# Verify installation
+RUN python --version && python -c "import RSeQC; print('RSeQC loaded successfully')" || \
+    python -c "import rseqc; print('RSeQC loaded successfully')" || \
+    bam_stat.py --version
+
+CMD ["/bin/bash"]

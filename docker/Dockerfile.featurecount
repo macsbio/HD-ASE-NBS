@@ -1,0 +1,22 @@
+FROM continuumio/miniconda3
+
+LABEL description="featureCount environment for read counting using Subread/featureCounts"
+LABEL maintainer="ASE-network-clustering"
+
+WORKDIR /app
+
+# Copy environment file
+COPY environments/featureCount_env.yml .
+
+# Create conda environment
+RUN conda env create -f featureCount_env.yml && \
+    conda clean -afy
+
+# Set environment as default
+ENV PATH=/opt/conda/envs/featureCount_env/bin:$PATH
+SHELL ["conda", "run", "-n", "featureCount_env", "/bin/bash", "-c"]
+
+# Verify installation
+RUN featureCounts -v
+
+CMD ["/bin/bash"]

@@ -1,0 +1,26 @@
+FROM continuumio/miniconda3
+
+LABEL description="pyNBS environment - Python 2.7 with network-based stratification dependencies"
+LABEL maintainer="ASE-network-clustering"
+
+WORKDIR /app
+
+# Copy environment file
+COPY environments/pynbs_env.yml .
+
+# Create conda environment
+# Note: this environment uses Python 2.7 and older package versions
+RUN conda env create -f pynbs_env.yml && \
+    conda clean -afy
+
+# Set environment as default
+ENV PATH=/opt/conda/envs/pynbs_env/bin:$PATH
+SHELL ["conda", "run", "-n", "pynbs_env", "/bin/bash", "-c"]
+
+# Verify installation
+RUN python --version && python -c "import networkx; import numpy; import pandas; import sklearn; print('All packages loaded successfully')"
+
+# Copy scripts
+COPY scripts/pyNBS ./scripts/pyNBS
+
+CMD ["/bin/bash"]
