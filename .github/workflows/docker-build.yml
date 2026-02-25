@@ -1,0 +1,47 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'environments/**'
+      - 'docker/**'
+      - '.github/workflows/docker-build.yml'
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: star
+            dockerfile: docker/Dockerfile.star
+          - name: gatk
+            dockerfile: docker/Dockerfile.gatk
+          - name: featurecount
+            dockerfile: docker/Dockerfile.featurecount
+          - name: rseqc
+            dockerfile: docker/Dockerfile.rseqc
+          - name: pynbs
+            dockerfile: docker/Dockerfile.pynbs
+      fail-fast: false  # if one image fails, others still build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }} image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/hd-ase-${{ matrix.name }}:latest
