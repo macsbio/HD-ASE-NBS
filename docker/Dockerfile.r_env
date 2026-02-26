@@ -1,0 +1,40 @@
+FROM rocker/bioconductor:3.22
+
+LABEL description="R 4.5.1 environment for HD-ASE-NBS analysis"
+LABEL maintainer="ashviyer"
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libfreetype6-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libjpeg-dev \
+    libgit2-dev \
+    libssh2-1-dev \
+    libglpk-dev \
+    libgmp-dev \
+    libgsl-dev \
+    libfftw3-dev \
+    default-jdk \
+    libxt-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure Java for R
+RUN R CMD javareconf
+
+# Copy package installation script
+COPY install_packages.R .
+
+# Install all packages
+RUN Rscript install_packages.R
+
+WORKDIR /app
+
+CMD ["R"]
