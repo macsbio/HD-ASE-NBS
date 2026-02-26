@@ -27,14 +27,4 @@ flowchart TD
     I --> J[Extend key genes with known Huntington causative genes from DisGeNET]
 ```
 
-    ## Pipeline
 
-| Step | Script | Environment | Input | Output |
-|------|--------|-------------|-------|--------|
-| 1. Alignment | `scripts/align.sh` | `star_env` | FASTQ | BAM |
-| 2. QC | `scripts/qc.sh` | `rseqc_env` | BAM | QC report |
-| 3. Read counting | `scripts/featurecount.sh` | `featureCount_env` | BAM | Count matrix |
-| 4. Diff. expression | `scripts/deseq2.R` | `r_env` | Count matrix | DE genes |
-| 5. Variant calling | `scripts/gatk.sh` | `gatk_env` | BAM | VCF |
-| 6. Network clustering | `scripts/pynbs_parallel.py` | `pynbs_env` | Mutation matrix | Clusters |
-| 7. Visualisation | `scripts/plots.R` | `r_env` | DE genes + Clusters | Figures |
