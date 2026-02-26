@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y \
 RUN R CMD javareconf
 
 # Copy package installation script
-COPY install_packages.R .
+COPY docker/install_packages.R .
 
 # Install all packages
 RUN Rscript install_packages.R
