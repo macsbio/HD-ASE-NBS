@@ -29,7 +29,8 @@ flowchart TD
     M[Download fastq files: fetch_fastq_sra.sh] --> N[QC for reads: fastqc]
     N --> O[Trim adapter sequences: read_trimming_fastp.sh]
     O --> N
-    O --> I[Align trimmed reads with WASP correction: star_wasp_align.sh]    
+    O --> I[Align trimmed reads with WASP correction: star_wasp_align.sh]
+    O --> C[Create genome index files: STAR_create_genome_index.sh]
 ```
 
     ## Pipeline
