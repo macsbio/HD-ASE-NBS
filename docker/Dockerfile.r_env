@@ -1,4 +1,4 @@
-FROM rocker/bioconductor:3.22
+FROM rocker/bioconductor:3.21
 
 LABEL description="R 4.5.1 environment for HD-ASE-NBS analysis"
 LABEL maintainer="ashviyer"
