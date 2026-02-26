@@ -13,7 +13,7 @@ Pre-built Docker images are available on Docker Hub:
 ### Run interactively:
 docker run -it ashviyer/hd-ase-star
 
-
+```mermaid
 flowchart TD
     A[Raw FASTQ files] --> B[STAR: Alignment\nstar_env]
     B --> C[featureCounts: Read Counting\nfeatureCount_env]
@@ -23,6 +23,7 @@ flowchart TD
     E --> F[GATK: Variant Calling / ASE\ngatk_env]
     F --> G[pyNBS: Network Clustering\npynbs_env]
     G --> H[R: Visualisation & Enrichment\nr_env]
+```
 
     ## Pipeline
 
