@@ -11,7 +11,7 @@ options(repos = c(
 # Install BiocManager first
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
-BiocManager::install(version = "3.21", ask = FALSE)
+BiocManager::install(version = "3.20", ask = FALSE)
 
 # ── CRAN packages ────────────────────────────────────────────────────────────
 cran_packages <- c(

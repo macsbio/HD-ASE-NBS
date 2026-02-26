@@ -28,7 +28,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Pull base image explicitly
-        run: docker pull bioconductor/bioconductor_docker:RELEASE_3_21
+        run: docker pull bioconductor/bioconductor_docker:RELEASE_3_20
 
       - name: Build and push R environment image
         uses: docker/build-push-action@v5
