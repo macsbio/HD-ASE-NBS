@@ -1,4 +1,4 @@
-
+```mermaid
 flowchart TD
   %% Inputs
   REF[FASTA / GTF / (known SNP VCF)] --> PREP[Preprocess reference files<br/>processing_files.sh]
@@ -25,5 +25,6 @@ flowchart TD
   TRIM --> STAR_WASP
   VCF_IDX --> STAR_WASP
   STAR_WASP --> BAM_PROC[Process WASP BAM (add RG + index)<br/>add_rg_and_index_wasp.sh]
+```
   BAM_PROC --> ASE[ASEReadCounter<br/>ASEReadCounter.sh]
 
