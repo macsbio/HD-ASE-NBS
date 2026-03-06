@@ -1,12 +1,11 @@
 # pyNBS_stability.py
-# Python 3 version
-# Quantitative stability metrics for pyNBS consensus clustering
+# Compatibility-oriented version for older pyNBS environments
+# No f-strings, no modern-only pandas options
 
 import os
 import numpy as np
 import pandas as pd
 from sklearn.metrics import silhouette_samples, silhouette_score
-from statsmodels.stats.multitest import multipletests
 
 
 def _check_inputs(cc_table, cluster_assign):
@@ -33,7 +32,6 @@ def _check_inputs(cc_table, cluster_assign):
 
 
 def _distance_from_consensus(cc_table):
-    # distance = 1 - consensus
     dist = 1.0 - cc_table.astype(float)
     np.fill_diagonal(dist.values, 0.0)
     return dist
@@ -100,6 +98,11 @@ def cluster_stability_table(cc_table, cluster_assign):
         within_mean = float(np.mean(within_vals))
         within_median = float(np.median(within_vals))
 
+        if pd.notnull(between_mean):
+            separation = within_mean - between_mean
+        else:
+            separation = np.nan
+
         rows.append({
             "cluster": cl,
             "n": n_in,
@@ -107,7 +110,7 @@ def cluster_stability_table(cc_table, cluster_assign):
             "within_median": within_median,
             "between_mean": between_mean,
             "between_median": between_median,
-            "separation": within_mean - between_mean if pd.notna(between_mean) else np.nan
+            "separation": separation
         })
 
     return pd.DataFrame(rows).sort_values("cluster")
@@ -149,13 +152,18 @@ def sample_assignment_confidence(cc_table, cluster_assign):
             best_other_cluster = np.nan
             best_other_mean = np.nan
 
+        if pd.notnull(own_mean) and pd.notnull(best_other_mean):
+            margin = own_mean - best_other_mean
+        else:
+            margin = np.nan
+
         rows.append({
             "sample": sample,
             "cluster": own_cluster,
             "own_cluster_mean_consensus": own_mean,
             "best_other_cluster": best_other_cluster,
             "best_other_mean_consensus": best_other_mean,
-            "margin": own_mean - best_other_mean if pd.notna(own_mean) and pd.notna(best_other_mean) else np.nan
+            "margin": margin
         })
 
     out = pd.DataFrame(rows).set_index("sample")
@@ -182,10 +190,14 @@ def consensus_silhouette(cc_table, cluster_assign):
     }, index=dist.index)
 
     cluster_df = (
-        sample_df.groupby("cluster", observed=False)["silhouette"]
+        sample_df.groupby("cluster")["silhouette"]
         .agg(["count", "mean", "median", "std", "min", "max"])
         .reset_index()
-        .rename(columns={"count": "n", "mean": "silhouette_mean", "median": "silhouette_median"})
+        .rename(columns={
+            "count": "n",
+            "mean": "silhouette_mean",
+            "median": "silhouette_median"
+        })
     )
 
     global_df = pd.Series({"global_silhouette": sil_mean}, name="silhouette_summary")
@@ -204,7 +216,7 @@ def pairwise_cluster_consensus(cc_table, cluster_assign):
     rows = []
     for i, c1 in enumerate(clusters):
         idx1 = cluster_assign[cluster_assign == c1].index
-        for c2 in clusters[i+1:]:
+        for c2 in clusters[i + 1:]:
             idx2 = cluster_assign[cluster_assign == c2].index
             vals = cc_table.loc[idx1, idx2].values.flatten()
             rows.append({
@@ -234,7 +246,7 @@ def seed_reproducibility(cluster_runs, method="ari"):
 
     for i, r1 in enumerate(run_names):
         s1 = cluster_runs[r1]
-        for r2 in run_names[i+1:]:
+        for r2 in run_names[i + 1:]:
             s2 = cluster_runs[r2]
             common = s1.index.intersection(s2.index)
             if len(common) == 0:
@@ -283,14 +295,34 @@ def full_stability_report(cc_table, cluster_assign, outdir=None, prefix="pyNBS")
     }
 
     if outdir is not None:
-        os.makedirs(outdir, exist_ok=True)
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
-        global_cons.to_csv(os.path.join(outdir, f"{prefix}_global_consensus.csv"), header=True)
-        cluster_stab.to_csv(os.path.join(outdir, f"{prefix}_cluster_stability.csv"), index=False)
-        sample_conf.to_csv(os.path.join(outdir, f"{prefix}_sample_confidence.csv"))
-        sil_global.to_csv(os.path.join(outdir, f"{prefix}_silhouette_global.csv"), header=True)
-        sil_cluster.to_csv(os.path.join(outdir, f"{prefix}_silhouette_cluster.csv"), index=False)
-        sil_sample.to_csv(os.path.join(outdir, f"{prefix}_silhouette_sample.csv"))
-        pairwise.to_csv(os.path.join(outdir, f"{prefix}_pairwise_cluster_consensus.csv"), index=False)
+        global_cons.to_csv(
+            os.path.join(outdir, "{}_global_consensus.csv".format(prefix)),
+            header=True
+        )
+        cluster_stab.to_csv(
+            os.path.join(outdir, "{}_cluster_stability.csv".format(prefix)),
+            index=False
+        )
+        sample_conf.to_csv(
+            os.path.join(outdir, "{}_sample_confidence.csv".format(prefix))
+        )
+        sil_global.to_csv(
+            os.path.join(outdir, "{}_silhouette_global.csv".format(prefix)),
+            header=True
+        )
+        sil_cluster.to_csv(
+            os.path.join(outdir, "{}_silhouette_cluster.csv".format(prefix)),
+            index=False
+        )
+        sil_sample.to_csv(
+            os.path.join(outdir, "{}_silhouette_sample.csv".format(prefix))
+        )
+        pairwise.to_csv(
+            os.path.join(outdir, "{}_pairwise_cluster_consensus.csv".format(prefix)),
+            index=False
+        )
 
     return report
