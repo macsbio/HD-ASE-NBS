@@ -1,11 +1,17 @@
+# -*- coding: utf-8 -*-
+
 # pyNBS_stability.py
-# Compatibility-oriented version for older pyNBS environments
-# No f-strings, no modern-only pandas options
+# Python 2.7-compatible stability metrics for pyNBS consensus clustering
 
 import os
 import numpy as np
 import pandas as pd
-from sklearn.metrics import silhouette_samples, silhouette_score
+
+try:
+    from sklearn.metrics import silhouette_samples, silhouette_score
+    SKLEARN_SILHOUETTE_AVAILABLE = True
+except ImportError:
+    SKLEARN_SILHOUETTE_AVAILABLE = False
 
 
 def _check_inputs(cc_table, cluster_assign):
@@ -14,7 +20,6 @@ def _check_inputs(cc_table, cluster_assign):
     if not isinstance(cluster_assign, pd.Series):
         raise TypeError("cluster_assign must be a pandas Series")
 
-    # Keep only overlapping samples and align order
     common = cc_table.index.intersection(cc_table.columns).intersection(cluster_assign.index)
     if len(common) == 0:
         raise ValueError("No overlapping sample IDs between cc_table and cluster_assign")
@@ -22,9 +27,9 @@ def _check_inputs(cc_table, cluster_assign):
     cc_table = cc_table.loc[common, common].copy()
     cluster_assign = cluster_assign.loc[common].copy()
 
-    # Basic checks
     if not np.allclose(cc_table.values, cc_table.values.T, atol=1e-8):
         raise ValueError("cc_table must be symmetric")
+
     if (cc_table.values < 0).any() or (cc_table.values > 1).any():
         raise ValueError("cc_table values should be in [0, 1]")
 
@@ -44,38 +49,37 @@ def _upper_triangle_values(mat):
 
 
 def summarize_consensus_matrix(cc_table):
-    """
-    Global summary of the consensus matrix.
-    """
     vals = _upper_triangle_values(cc_table.values)
+
     return pd.Series({
-        "n_samples": cc_table.shape[0],
-        "mean_consensus": np.mean(vals),
-        "median_consensus": np.median(vals),
-        "sd_consensus": np.std(vals, ddof=1),
-        "min_consensus": np.min(vals),
-        "max_consensus": np.max(vals)
+        "n_samples": int(cc_table.shape[0]),
+        "mean_consensus": float(np.mean(vals)),
+        "median_consensus": float(np.median(vals)),
+        "sd_consensus": float(np.std(vals, ddof=1)),
+        "min_consensus": float(np.min(vals)),
+        "max_consensus": float(np.max(vals))
     }, name="global_consensus")
 
 
 def cluster_stability_table(cc_table, cluster_assign):
     """
-    Per-cluster within/between consensus and separation.
-    Higher within-cluster consensus and lower between-cluster consensus are better.
+    Per-cluster within-cluster consensus, between-cluster consensus,
+    and separation = within_mean - between_mean
     """
     cc_table, cluster_assign = _check_inputs(cc_table, cluster_assign)
     clusters = sorted(cluster_assign.dropna().unique())
 
     rows = []
+
     for cl in clusters:
         in_idx = cluster_assign[cluster_assign == cl].index
         out_idx = cluster_assign[cluster_assign != cl].index
-
         n_in = len(in_idx)
+
         if n_in < 2:
             rows.append({
                 "cluster": cl,
-                "n": n_in,
+                "n": int(n_in),
                 "within_mean": np.nan,
                 "within_median": np.nan,
                 "between_mean": np.nan,
@@ -87,25 +91,22 @@ def cluster_stability_table(cc_table, cluster_assign):
         within = cc_table.loc[in_idx, in_idx].values
         within_vals = _upper_triangle_values(within)
 
+        within_mean = float(np.mean(within_vals))
+        within_median = float(np.median(within_vals))
+
         if len(out_idx) > 0:
             between_vals = cc_table.loc[in_idx, out_idx].values.flatten()
             between_mean = float(np.mean(between_vals))
             between_median = float(np.median(between_vals))
+            separation = within_mean - between_mean
         else:
             between_mean = np.nan
             between_median = np.nan
-
-        within_mean = float(np.mean(within_vals))
-        within_median = float(np.median(within_vals))
-
-        if pd.notnull(between_mean):
-            separation = within_mean - between_mean
-        else:
             separation = np.nan
 
         rows.append({
             "cluster": cl,
-            "n": n_in,
+            "n": int(n_in),
             "within_mean": within_mean,
             "within_median": within_median,
             "between_mean": between_mean,
@@ -118,39 +119,42 @@ def cluster_stability_table(cc_table, cluster_assign):
 
 def sample_assignment_confidence(cc_table, cluster_assign):
     """
-    Sample-level confidence:
-    - mean consensus to own cluster
-    - best competing cluster consensus
+    For each sample:
+    - mean consensus to its own cluster
+    - highest mean consensus to another cluster
     - margin = own - best_other
     """
     cc_table, cluster_assign = _check_inputs(cc_table, cluster_assign)
     clusters = sorted(cluster_assign.dropna().unique())
 
     rows = []
+
     for sample in cc_table.index:
         own_cluster = cluster_assign.loc[sample]
-        own_members = cluster_assign[cluster_assign == own_cluster].index.difference([sample])
+        own_members = cluster_assign[cluster_assign == own_cluster].index
+        own_members = own_members.difference([sample])
 
         if len(own_members) > 0:
             own_mean = float(cc_table.loc[sample, own_members].mean())
         else:
             own_mean = np.nan
 
-        other_means = {}
+        best_other_cluster = np.nan
+        best_other_mean = np.nan
+
         for cl in clusters:
             if cl == own_cluster:
                 continue
+
             members = cluster_assign[cluster_assign == cl].index
             if len(members) == 0:
                 continue
-            other_means[cl] = float(cc_table.loc[sample, members].mean())
 
-        if len(other_means) > 0:
-            best_other_cluster = max(other_means, key=other_means.get)
-            best_other_mean = other_means[best_other_cluster]
-        else:
-            best_other_cluster = np.nan
-            best_other_mean = np.nan
+            this_mean = float(cc_table.loc[sample, members].mean())
+
+            if pd.isnull(best_other_mean) or (this_mean > best_other_mean):
+                best_other_mean = this_mean
+                best_other_cluster = cl
 
         if pd.notnull(own_mean) and pd.notnull(best_other_mean):
             margin = own_mean - best_other_mean
@@ -166,14 +170,25 @@ def sample_assignment_confidence(cc_table, cluster_assign):
             "margin": margin
         })
 
-    out = pd.DataFrame(rows).set_index("sample")
-    return out.sort_values(["cluster", "margin"], ascending=[True, False])
+    out = pd.DataFrame(rows)
+    out = out.set_index("sample")
+    out = out.sort_values(["cluster", "margin"], ascending=[True, False])
+
+    return out
 
 
 def consensus_silhouette(cc_table, cluster_assign):
     """
-    Silhouette score using precomputed distance = 1 - consensus.
+    Silhouette using precomputed distance = 1 - consensus.
+
+    Returns:
+    - global_df: Series with global silhouette
+    - cluster_df: summary per cluster
+    - sample_df: silhouette per sample
     """
+    if not SKLEARN_SILHOUETTE_AVAILABLE:
+        raise ImportError("scikit-learn silhouette functions are not available in this environment")
+
     cc_table, cluster_assign = _check_inputs(cc_table, cluster_assign)
     dist = _distance_from_consensus(cc_table)
 
@@ -189,36 +204,40 @@ def consensus_silhouette(cc_table, cluster_assign):
         "silhouette": sil_samples
     }, index=dist.index)
 
-    cluster_df = (
-        sample_df.groupby("cluster")["silhouette"]
-        .agg(["count", "mean", "median", "std", "min", "max"])
-        .reset_index()
-        .rename(columns={
-            "count": "n",
-            "mean": "silhouette_mean",
-            "median": "silhouette_median"
-        })
-    )
+    cluster_df = sample_df.groupby("cluster")["silhouette"].agg([
+        "count", "mean", "median", "std", "min", "max"
+    ]).reset_index()
 
-    global_df = pd.Series({"global_silhouette": sil_mean}, name="silhouette_summary")
+    cluster_df = cluster_df.rename(columns={
+        "count": "n",
+        "mean": "silhouette_mean",
+        "median": "silhouette_median"
+    })
+
+    global_df = pd.Series({
+        "global_silhouette": float(sil_mean)
+    }, name="silhouette_summary")
 
     return global_df, cluster_df, sample_df
 
 
 def pairwise_cluster_consensus(cc_table, cluster_assign):
     """
-    Mean/median consensus for each cluster pair.
-    Useful to see which clusters are poorly separated.
+    Mean/median consensus between each pair of clusters.
+    Lower values indicate better separation.
     """
     cc_table, cluster_assign = _check_inputs(cc_table, cluster_assign)
     clusters = sorted(cluster_assign.dropna().unique())
 
     rows = []
+
     for i, c1 in enumerate(clusters):
         idx1 = cluster_assign[cluster_assign == c1].index
+
         for c2 in clusters[i + 1:]:
             idx2 = cluster_assign[cluster_assign == c2].index
             vals = cc_table.loc[idx1, idx2].values.flatten()
+
             rows.append({
                 "cluster_1": c1,
                 "cluster_2": c2,
@@ -233,11 +252,13 @@ def pairwise_cluster_consensus(cc_table, cluster_assign):
 
 def seed_reproducibility(cluster_runs, method="ari"):
     """
-    Compare cluster labels across repeated pyNBS runs.
-    cluster_runs: dict of {run_name: pd.Series(sample -> cluster)}
-    method: 'ari' or 'nmi'
+    Compare repeated clustering runs.
 
-    This requires you to save labels from repeated runs with different seeds/subsampling.
+    cluster_runs: dict
+        {run_name: pandas Series indexed by sample, values = cluster labels}
+
+    method:
+        'ari' or 'nmi'
     """
     from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 
@@ -246,9 +267,11 @@ def seed_reproducibility(cluster_runs, method="ari"):
 
     for i, r1 in enumerate(run_names):
         s1 = cluster_runs[r1]
+
         for r2 in run_names[i + 1:]:
             s2 = cluster_runs[r2]
             common = s1.index.intersection(s2.index)
+
             if len(common) == 0:
                 continue
 
@@ -265,64 +288,88 @@ def seed_reproducibility(cluster_runs, method="ari"):
             rows.append({
                 "run_1": r1,
                 "run_2": r2,
-                "n_samples": len(common),
-                method.lower(): score
+                "n_samples": int(len(common)),
+                method.lower(): float(score)
             })
 
     return pd.DataFrame(rows)
 
 
-def full_stability_report(cc_table, cluster_assign, outdir=None, prefix="pyNBS"):
+def full_stability_report(cc_table, cluster_assign, outdir=None, prefix="pyNBS", do_silhouette=True):
     """
-    Run the main stability summaries and optionally save them.
+    Main wrapper.
+
+    Returns a dict with:
+    - global_consensus
+    - cluster_stability
+    - sample_confidence
+    - pairwise_cluster_consensus
+    - silhouette_global      (if available)
+    - silhouette_cluster     (if available)
+    - silhouette_sample      (if available)
     """
     cc_table, cluster_assign = _check_inputs(cc_table, cluster_assign)
 
     global_cons = summarize_consensus_matrix(cc_table)
     cluster_stab = cluster_stability_table(cc_table, cluster_assign)
     sample_conf = sample_assignment_confidence(cc_table, cluster_assign)
-    sil_global, sil_cluster, sil_sample = consensus_silhouette(cc_table, cluster_assign)
     pairwise = pairwise_cluster_consensus(cc_table, cluster_assign)
 
     report = {
         "global_consensus": global_cons,
         "cluster_stability": cluster_stab,
         "sample_confidence": sample_conf,
-        "silhouette_global": sil_global,
-        "silhouette_cluster": sil_cluster,
-        "silhouette_sample": sil_sample,
         "pairwise_cluster_consensus": pairwise
     }
+
+    if do_silhouette:
+        try:
+            sil_global, sil_cluster, sil_sample = consensus_silhouette(cc_table, cluster_assign)
+            report["silhouette_global"] = sil_global
+            report["silhouette_cluster"] = sil_cluster
+            report["silhouette_sample"] = sil_sample
+        except Exception as e:
+            report["silhouette_error"] = str(e)
 
     if outdir is not None:
         if not os.path.exists(outdir):
             os.makedirs(outdir)
 
         global_cons.to_csv(
-            os.path.join(outdir, "{}_global_consensus.csv".format(prefix)),
+            os.path.join(outdir, "%s_global_consensus.csv" % prefix),
             header=True
         )
+
         cluster_stab.to_csv(
-            os.path.join(outdir, "{}_cluster_stability.csv".format(prefix)),
+            os.path.join(outdir, "%s_cluster_stability.csv" % prefix),
             index=False
         )
+
         sample_conf.to_csv(
-            os.path.join(outdir, "{}_sample_confidence.csv".format(prefix))
+            os.path.join(outdir, "%s_sample_confidence.csv" % prefix)
         )
-        sil_global.to_csv(
-            os.path.join(outdir, "{}_silhouette_global.csv".format(prefix)),
-            header=True
-        )
-        sil_cluster.to_csv(
-            os.path.join(outdir, "{}_silhouette_cluster.csv".format(prefix)),
-            index=False
-        )
-        sil_sample.to_csv(
-            os.path.join(outdir, "{}_silhouette_sample.csv".format(prefix))
-        )
+
         pairwise.to_csv(
-            os.path.join(outdir, "{}_pairwise_cluster_consensus.csv".format(prefix)),
+            os.path.join(outdir, "%s_pairwise_cluster_consensus.csv" % prefix),
             index=False
         )
+
+        if "silhouette_global" in report:
+            report["silhouette_global"].to_csv(
+                os.path.join(outdir, "%s_silhouette_global.csv" % prefix),
+                header=True
+            )
+            report["silhouette_cluster"].to_csv(
+                os.path.join(outdir, "%s_silhouette_cluster.csv" % prefix),
+                index=False
+            )
+            report["silhouette_sample"].to_csv(
+                os.path.join(outdir, "%s_silhouette_sample.csv" % prefix)
+            )
+
+        if "silhouette_error" in report:
+            fh = open(os.path.join(outdir, "%s_silhouette_error.txt" % prefix), "w")
+            fh.write(report["silhouette_error"])
+            fh.close()
 
     return report
