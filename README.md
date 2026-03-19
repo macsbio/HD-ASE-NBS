@@ -1,5 +1,4 @@
-# A first-level heading
-Network-based stratification of allele-specific expression reveals patient subgroups in Huntington's disease
+# Network-based stratification of allele-specific expression reveals patient subgroups in Huntington's disease
 
 
 ## Docker Images
